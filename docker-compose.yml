@@ -18,6 +18,9 @@ services:
     restart: on-failure
     ports:
       - "8000:8000"
+
+    volumes:
+      - .:/code
     environment:
       DATABASE_URL: postgresql://user:password@db:5432/autoservice_db
     depends_on:
