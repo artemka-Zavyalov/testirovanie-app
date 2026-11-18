@@ -1,0 +1,68 @@
+# 1. Список клиентов
+clients:
+  - id: 1
+    name: "Иван Иванов"
+    phone: "+79991112233"
+  - id: 2
+    name: "Петр Сергеев"
+    phone: "+79992223344"
+  - id: 3
+    name: "Анна Смирнова"
+    phone: "+79993334455"
+
+# 2. Список автомобилей (client_id ссылается на id клиента)
+cars:
+  - id: 1
+    brand: "Toyota"
+    model: "Camry"
+    vin: "JT1234567890CAMRY"
+    client_id: 1
+  - id: 2
+    brand: "BMW"
+    model: "X5"
+    vin: "WB1234567890BMWX5"
+    client_id: 2
+  - id: 3
+    brand: "Hyundai"
+    model: "Solaris"
+    vin: "KM1234567890SOLAR"
+    client_id: 3
+
+# 3. Список механиков
+mechanics:
+  - id: 1
+    name: "Алексей Петрович"
+    specialty: "Моторист"
+  - id: 2
+    name: "Дмитрий Сергеевич"
+    specialty: "Автоэлектрик"
+
+# 4. Прайс-лист услуг
+services:
+  - id: 1
+    title: "Замена масла в двигателе"
+    price: 2500
+  - id: 2
+    title: "Компьютерная диагностика"
+    price: 1500
+  - id: 3
+    title: "Замена тормозных колодок"
+    price: 3500
+
+# 5. Заказы на ремонт (связывают машину, механика и услугу)
+orders:
+  - id: 1
+    car_id: 1
+    mechanic_id: 1
+    service_id: 1
+    status: "В работе"
+  - id: 2
+    car_id: 2
+    mechanic_id: 2
+    service_id: 2
+    status: "Готов"
+  - id: 3
+    car_id: 3
+    mechanic_id: 1
+    service_id: 3
+    status: "В работе"
