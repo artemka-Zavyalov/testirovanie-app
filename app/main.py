@@ -1,23 +1,24 @@
-import app
+import os
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from . import database, models
-import os
 import yaml
+from . import database, models
 
-# Авто-загрузка фикстуры при старте
+
+models.Base.metadata.create_all(bind=database.engine)
+app = FastAPI(title="Автосервис API")
+
 @app.on_event("startup")
 def load_fixtures():
     db = database.SessionLocal()
-    # Проверяем, пустая ли база
+
     if db.query(models.Client).count() == 0:
         fixture_path = "fixtures.yml"
         if os.path.exists(fixture_path):
             with open(fixture_path, "r", encoding="utf-8") as f:
                 data = yaml.safe_load(f)
 
-                # Заполняем таблицы
                 for item in data.get("clients", []):
                     db.add(models.Client(**item))
                 for item in data.get("cars", []):
@@ -33,12 +34,7 @@ def load_fixtures():
                 db.commit()
     db.close()
 
-models.Base.metadata.create_all(bind=database.engine)
 
-app = FastAPI(title="Автосервис API")
-
-
-# Схемы данных
 class ClientCreate(BaseModel):
     name: str
     phone: str
@@ -67,7 +63,6 @@ class OrderCreate(BaseModel):
     service_id: int
 
 
-# --- 10 ОПЕРАЦИЙ ---
 
 
 # 1. Создать клиента
@@ -82,7 +77,7 @@ def create_client(
     return db_client
 
 
-# 2. Получить список всех клиентов
+# 2. Список всех клиентов
 @app.get("/clients/", tags=["Клиенты"])
 def get_clients(db: Session = Depends(database.get_db)):
     return db.query(models.Client).all()
