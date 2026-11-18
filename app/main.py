@@ -1,18 +1,22 @@
 import os
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 import yaml
 from . import database, models
 
-
+# Создаем таблицы в БД
 models.Base.metadata.create_all(bind=database.engine)
+
 app = FastAPI(title="Автосервис API")
 
+
+# Автозагрузка данных из fixtures.yml при старте
 @app.on_event("startup")
 def load_fixtures():
     db = database.SessionLocal()
-
+    # Если база пустая — загружаем YAML
     if db.query(models.Client).count() == 0:
         fixture_path = "fixtures.yml"
         if os.path.exists(fixture_path):
@@ -32,9 +36,20 @@ def load_fixtures():
                 for item in data.get("orders", []):
                     db.add(models.Order(**item))
                 db.commit()
+
+                # Сбрасываем счетчики ID, чтобы не было ошибки UniqueViolation
+                tables = ["clients", "cars", "mechanics", "services", "orders"]
+                for table in tables:
+                    db.execute(
+                        text(
+                            f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), coalesce(max(id), 1)) FROM {table};"
+                        )
+                    )
+                db.commit()
     db.close()
 
 
+# --- СХЕМЫ ДАННЫХ (Pydantic) ---
 class ClientCreate(BaseModel):
     name: str
     phone: str
@@ -63,13 +78,20 @@ class OrderCreate(BaseModel):
     service_id: int
 
 
+# ==========================================
+# 1. КЛИЕНТЫ (GET + POST)
+# ==========================================
+@app.get("/clients/", tags=["1. Клиенты"])
+def get_clients(db: Session = Depends(database.get_db)):
+    """Получить всех клиентов"""
+    return db.query(models.Client).all()
 
 
-# 1. Создать клиента
-@app.post("/clients/", tags=["Клиенты"])
+@app.post("/clients/", tags=["1. Клиенты"])
 def create_client(
     client: ClientCreate, db: Session = Depends(database.get_db)
 ):
+    """Добавить клиента"""
     db_client = models.Client(name=client.name, phone=client.phone)
     db.add(db_client)
     db.commit()
@@ -77,15 +99,18 @@ def create_client(
     return db_client
 
 
-# 2. Список всех клиентов
-@app.get("/clients/", tags=["Клиенты"])
-def get_clients(db: Session = Depends(database.get_db)):
-    return db.query(models.Client).all()
+# ==========================================
+# 2. МАШИНЫ (GET + POST)
+# ==========================================
+@app.get("/cars/", tags=["2. Машины"])
+def get_cars(db: Session = Depends(database.get_db)):
+    """Получить все машины"""
+    return db.query(models.Car).all()
 
 
-# 3. Добавить машину
-@app.post("/cars/", tags=["Машины"])
+@app.post("/cars/", tags=["2. Машины"])
 def create_car(car: CarCreate, db: Session = Depends(database.get_db)):
+    """Добавить машину"""
     db_car = models.Car(**car.model_dump())
     db.add(db_car)
     db.commit()
@@ -93,19 +118,20 @@ def create_car(car: CarCreate, db: Session = Depends(database.get_db)):
     return db_car
 
 
-# 4. Получить машины клиента
-@app.get("/cars/client/{client_id}", tags=["Машины"])
-def get_cars_by_client(client_id: int, db: Session = Depends(database.get_db)):
-    return (
-        db.query(models.Car).filter(models.Car.client_id == client_id).all()
-    )
+# ==========================================
+# 3. МЕХАНИКИ (GET + POST)
+# ==========================================
+@app.get("/mechanics/", tags=["3. Механики"])
+def get_mechanics(db: Session = Depends(database.get_db)):
+    """Получить всех механиков"""
+    return db.query(models.Mechanic).all()
 
 
-# 5. Добавить механика
-@app.post("/mechanics/", tags=["Механики"])
+@app.post("/mechanics/", tags=["3. Механики"])
 def create_mechanic(
     mech: MechanicCreate, db: Session = Depends(database.get_db)
 ):
+    """Нанять нового механика"""
     db_mech = models.Mechanic(**mech.model_dump())
     db.add(db_mech)
     db.commit()
@@ -113,17 +139,20 @@ def create_mechanic(
     return db_mech
 
 
-# Получить список всех механиков
-@app.get("/mechanics/", tags=["Механики"])
-def get_mechanics(db: Session = Depends(database.get_db)):
-    return db.query(models.Mechanic).all()
+# ==========================================
+# 4. УСЛУГИ (GET + POST)
+# ==========================================
+@app.get("/services/", tags=["4. Услуги"])
+def get_services(db: Session = Depends(database.get_db)):
+    """Получить прайс-лист услуг"""
+    return db.query(models.Service).all()
 
 
-# 6. Добавить услугу
-@app.post("/services/", tags=["Услуги"])
+@app.post("/services/", tags=["4. Услуги"])
 def create_service(
     service: ServiceCreate, db: Session = Depends(database.get_db)
 ):
+    """Добавить услугу в прайс-лист"""
     db_service = models.Service(**service.model_dump())
     db.add(db_service)
     db.commit()
@@ -131,26 +160,13 @@ def create_service(
     return db_service
 
 
-# 7. Изменить цену услуги
-@app.put("/services/{service_id}", tags=["Услуги"])
-def update_service_price(
-    service_id: int, new_price: int, db: Session = Depends(database.get_db)
-):
-    db_service = (
-        db.query(models.Service)
-        .filter(models.Service.id == service_id)
-        .first()
-    )
-    if not db_service:
-        raise HTTPException(status_code=404, detail="Услуга не найдена")
-    db_service.price = new_price
-    db.commit()
-    return db_service
-
-
-# 8. Создать заказ
-@app.post("/orders/", tags=["Заказы"])
+# ==========================================
+# 5. ЗАКАЗЫ (ПОЛНЫЙ CRUD)
+# ==========================================
+# [C - Create]
+@app.post("/orders/", tags=["5. Заказы (CRUD)"])
 def create_order(order: OrderCreate, db: Session = Depends(database.get_db)):
+    """Создать новый заказ-наряд"""
     db_order = models.Order(**order.model_dump())
     db.add(db_order)
     db.commit()
@@ -158,11 +174,29 @@ def create_order(order: OrderCreate, db: Session = Depends(database.get_db)):
     return db_order
 
 
-# 9. Изменить статус заказа
-@app.patch("/orders/{order_id}/status", tags=["Заказы"])
+# [R - Read All]
+@app.get("/orders/", tags=["5. Заказы (CRUD)"])
+def get_all_orders(db: Session = Depends(database.get_db)):
+    """Получить список всех заказов"""
+    return db.query(models.Order).all()
+
+
+# [R - Read One]
+@app.get("/orders/{order_id}", tags=["5. Заказы (CRUD)"])
+def get_order_by_id(order_id: int, db: Session = Depends(database.get_db)):
+    """Получить один конкретный заказ по его ID"""
+    order = db.query(models.Order).filter(models.Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Заказ не найден")
+    return order
+
+
+# [U - Update]
+@app.patch("/orders/{order_id}/status", tags=["5. Заказы (CRUD)"])
 def update_order_status(
     order_id: int, status: str, db: Session = Depends(database.get_db)
 ):
+    """Обновить статус заказа (например: В работе -> Готов)"""
     db_order = (
         db.query(models.Order).filter(models.Order.id == order_id).first()
     )
@@ -170,12 +204,14 @@ def update_order_status(
         raise HTTPException(status_code=404, detail="Заказ не найден")
     db_order.status = status
     db.commit()
+    db.refresh(db_order)
     return db_order
 
 
-# 10. Удалить заказ
-@app.delete("/orders/{order_id}", tags=["Заказы"])
+# [D - Delete]
+@app.delete("/orders/{order_id}", tags=["5. Заказы (CRUD)"])
 def delete_order(order_id: int, db: Session = Depends(database.get_db)):
+    """Удалить заказ"""
     db_order = (
         db.query(models.Order).filter(models.Order.id == order_id).first()
     )
@@ -183,4 +219,4 @@ def delete_order(order_id: int, db: Session = Depends(database.get_db)):
         raise HTTPException(status_code=404, detail="Заказ не найден")
     db.delete(db_order)
     db.commit()
-    return {"message": "Заказ удален"}
+    return {"message": f"Заказ с ID {order_id} успешно удален"}
