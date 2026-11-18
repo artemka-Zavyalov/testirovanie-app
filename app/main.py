@@ -113,6 +113,12 @@ def create_mechanic(
     return db_mech
 
 
+# Получить список всех механиков
+@app.get("/mechanics/", tags=["Механики"])
+def get_mechanics(db: Session = Depends(database.get_db)):
+    return db.query(models.Mechanic).all()
+
+
 # 6. Добавить услугу
 @app.post("/services/", tags=["Услуги"])
 def create_service(
