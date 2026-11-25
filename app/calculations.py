@@ -1,9 +1,9 @@
 # app/calculations.py
 
 
-# Расчет 1: НДС (20%) от суммы
+# Расчет 1: НДС (22%) от суммы
 def calculate_vat(price: float) -> float:
-    return round(price * 0.20, 2)
+    return round(price * 0.22, 2)
 
 
 # Расчет 2: Скидка клиента в зависимости от количества его авто (0% или 10%)

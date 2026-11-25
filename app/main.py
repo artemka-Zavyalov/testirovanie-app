@@ -153,7 +153,7 @@ def create_mechanic(
 
 
 # ================= УСЛУГИ =================
-# Метод 7: [GET] Прайс-лист с расчетом НДС и гарантией
+# Метод 7: [GET] Прайс-лист с расчетом НДС 22% и гарантией
 @app.get("/services/", tags=["4. Услуги"])
 def get_services(db: Session = Depends(database.get_db)):
     services = db.query(models.Service).all()
@@ -164,7 +164,7 @@ def get_services(db: Session = Depends(database.get_db)):
                 "id": s.id,
                 "title": s.title,
                 "price": s.price,
-                "vat_20": calculations.calculate_vat(s.price),
+                "vat_22": calculations.calculate_vat(s.price),  # НДС 22%
                 "warranty_days": calculations.calculate_warranty_days(s.price),
             }
         )
